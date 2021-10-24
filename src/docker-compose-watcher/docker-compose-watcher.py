@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -18,6 +19,7 @@ EXIT_NOTFOUND: int = 1
 
 class DockerComposeYmlHandler(FileSystemEventHandler):
     """
+    On linux:
     Because watchdog fire on_modified twice ,
     I add hack with MIN_TIME_BETWEEN_MODIFIED_EVENTS
     """
@@ -26,7 +28,7 @@ class DockerComposeYmlHandler(FileSystemEventHandler):
 
     def __init__(self, files: list[str]) -> None:
         self.files: list[str] = files
-        self.event_times: dict[str:int] = {}
+        self.event_times: dict[str:float] = {}
         super().__init__()
 
     def on_any_event(self, event):
@@ -35,12 +37,25 @@ class DockerComposeYmlHandler(FileSystemEventHandler):
     def on_modified(self, event):
         if event.src_path not in self.files:
             return
-        self.event_times["event.src_path"] = time.time()
         if (
-            self.event_times.get(event.src_path, 0) - time.time()
-        ) > DockerComposeYmlHandler.MIN_TIME_BETWEEN_MODIFIED_EVENTS:
+            time.time() - self.event_times.get(event.src_path, 0)
+        ) < DockerComposeYmlHandler.MIN_TIME_BETWEEN_MODIFIED_EVENTS:
+            self.event_times[event.src_path] = time.time()
             return
+        self.event_times[event.src_path] = time.time()
         print(f"on_modified {event.src_path} {event.event_type}")
+        result = subprocess.run(
+            [
+                "docker-compose",
+                "config",
+                "--file",
+                event.src_path,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        print(result.stdout.decode("utf-8").split("\n"))
+        print(result.stderr.decode("utf-8").split("\n"))
 
 
 def get_parser() -> argparse.ArgumentParser:

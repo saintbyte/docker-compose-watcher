@@ -3,3 +3,4 @@
 
 ## Exit Codes
 0 - Нормальное завершение
+1 - Docker-compose.yml не найден
